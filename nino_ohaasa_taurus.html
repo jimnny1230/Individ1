@@ -30,6 +30,8 @@ const today=new Date();
 $('today').textContent=new Intl.DateTimeFormat('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'}).format(today);
 const official='https://www.asahi.co.jp/ohaasa/week/horoscope/';
 const proxies=[
+ // CORS proxy for static GitHub Pages sites; then try alternate public readers.
+ url=>'https://proxy.cors.dev/'+url,
  url=>'https://api.allorigins.win/raw?url='+encodeURIComponent(url),
  url=>'https://corsproxy.io/?url='+encodeURIComponent(url),
  url=>'https://r.jina.ai/http://'+url.replace(/^https?:\/\//,'')
@@ -101,8 +103,15 @@ async function loadFortune(){
   let plain=clean(body);
   // If the main page only contains an iframe, follow its source through the same reader.
   if(!/おうし座/.test(plain)){
-   const match=body.match(/(?:src|data-src)=["']([^"']*(?:horoscope|uranai|fortune)[^"']*)["']/i);
-   if(match){let u=match[1].replace(/&amp;/g,'&');if(u.startsWith('//'))u='https:'+u;else if(u.startsWith('/'))u='https://www.asahi.co.jp'+u;body=await getPage(u);plain=clean(body);}
+   // The official page may load the horoscope in an iframe with a less obvious URL.
+   const matches=[...body.matchAll(/(?:src|data-src)=["']([^"']+)["']/gi)];
+   for(const item of matches){
+    let u=item[1].replace(/&amp;/g,'&');
+    if(u.startsWith('//'))u='https:'+u;
+    else if(u.startsWith('/'))u='https://www.asahi.co.jp'+u;
+    if(!/^https?:\/\//i.test(u) || !/asahi\.co\.jp|ohaasa/i.test(u))continue;
+    try{const candidate=await getPage(u);const candidateText=clean(candidate);if(/おうし座/.test(candidateText)){body=candidate;plain=candidateText;break;}}catch(e){}
+   }
   }
   let rank=findRank(plain);
   if(!rank)throw new Error('공식 페이지에서 황소자리 순위를 찾지 못했어.');
